@@ -65,8 +65,6 @@ docker build -t ml-inference-api .
 docker run --rm -p 8000:8000 ml-inference-api
 ```
 
-Interactive Swagger UI: <http://localhost:8000/docs> · ReDoc: <http://localhost:8000/redoc>
-
 ### Run the tests
 ```bash
 pytest -v
