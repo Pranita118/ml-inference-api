@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ML Inference Console</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🧬</text></svg>">
+<style>
+:root{--bg:#f6f6f3;--surface:#fff;--text:#1d1d1b;--muted:#6b6b66;--border:#e0e0da;--accent:#2f5fd0;--bad:#c0392b;--good:#1e8449;--track:#ececE6;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#151514;--surface:#1f1f1d;--text:#ecece8;--muted:#9a9a93;--border:#34342f;--accent:#7ea2ff;--bad:#ff7b6b;--good:#5fd08a;--track:#2c2c29;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#151514;--surface:#1f1f1d;--text:#ecece8;--muted:#9a9a93;--border:#34342f;--accent:#7ea2ff;--bad:#ff7b6b;--good:#5fd08a;--track:#2c2c29;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:980px;margin:0 auto;padding:24px 16px 48px}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:12px;justify-content:space-between;margin-bottom:4px}
+h1{font-size:22px;margin:0}
+.sub{color:var(--muted);margin:0 0 20px;font-size:13px}
+.pill{font-size:12px;padding:3px 10px;border-radius:99px;border:1px solid var(--border);background:var(--surface)}
+.pill.ok{color:var(--good)} .pill.down{color:var(--bad)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px}
+.card h2{font-size:14px;margin:0 0 12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+label{display:block;font-size:11px;color:var(--muted);margin-bottom:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+input{width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font:inherit;font-size:13px}
+.row{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;align-items:center}
+button{padding:8px 14px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);font:inherit;cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+button:hover{filter:brightness(.96)}
+.key{margin-left:auto;max-width:220px}
+.label{font-size:28px;font-weight:700;text-transform:capitalize}
+.meta{color:var(--muted);font-size:12px}
+.bar{margin:10px 0}
+.bar .top{display:flex;justify-content:space-between;font-size:13px;text-transform:capitalize}
+.track{height:10px;border-radius:99px;background:var(--track);overflow:hidden}
+.fill{height:100%;background:var(--accent);border-radius:99px;transition:width .4s}
+pre{margin:12px 0 0;padding:12px;border-radius:8px;background:var(--bg);overflow-x:auto;font-size:12px}
+.err{color:var(--bad)}
+.banner{background:var(--surface);border:1px dashed var(--border);border-radius:10px;padding:10px 14px;margin-bottom:16px;font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+<main>
+<header><h1>ML Inference Console</h1><span id="health" class="pill">checking…</span></header>
+<p class="sub" id="modelline">Loading model info…</p>
+<!--BANNER-->
+<section class="card">
+  <h2>Input features</h2>
+  <div class="grid" id="grid"></div>
+  <div class="row">
+    <button class="primary" id="go">Predict</button>
+    <button id="ex-m">Load malignant example</button>
+    <button id="ex-b">Load benign example</button>
+    <button id="clear">Clear</button>
+    <input class="key" id="apikey" type="password" placeholder="API key (if enabled)" autocomplete="off">
+  </div>
+</section>
+<section class="card" id="result" hidden>
+  <h2>Prediction</h2>
+  <div class="label" id="rlabel"></div>
+  <div class="meta" id="rmeta"></div>
+  <div id="bars"></div>
+  <pre id="raw"></pre>
+</section>
+</main>
+<script>
+const $=s=>document.querySelector(s);
+/*API_START*/
+async function apiInfo(){const r=await fetch('/model-info');return r.json();}
+async function apiHealth(){const r=await fetch('/health');return r.json();}
+async function apiPredict(features){
+  const h={'Content-Type':'application/json'}, k=$('#apikey').value; if(k) h['X-API-Key']=k;
+  const t=performance.now();
+  const r=await fetch('/predict',{method:'POST',headers:h,body:JSON.stringify({features})});
+  return {status:r.status,body:await r.json(),ms:performance.now()-t};
+}
+/*API_END*/
+let info, inputs=[];
+function fill(v){inputs.forEach((el,i)=>el.value=v?v[i]:'');}
+async function init(){
+  try{const h=await apiHealth();const p=$('#health');p.textContent=h.model_loaded?'API online':'model not loaded';p.className='pill '+(h.model_loaded?'ok':'down');}
+  catch(e){const p=$('#health');p.textContent='API unreachable';p.className='pill down';return;}
+  info=await apiInfo();
+  $('#modelline').textContent=`Model: ${info.model_name} v${info.version} · ${info.n_features} features · test ROC-AUC ${info.test_metrics.roc_auc} · accuracy ${info.test_metrics.accuracy}`;
+  const g=$('#grid');
+  info.feature_names.forEach(n=>{const w=document.createElement('div');const l=document.createElement('label');l.textContent=n;l.title=n;
+    const i=document.createElement('input');i.type='number';i.step='any';w.append(l,i);g.append(w);inputs.push(i);});
+  fill(info.examples.malignant);
+}
+$('#ex-m').onclick=()=>fill(info.examples.malignant);
+$('#ex-b').onclick=()=>fill(info.examples.benign);
+$('#clear').onclick=()=>fill(null);
+$('#go').onclick=async()=>{
+  const vals=inputs.map(i=>parseFloat(i.value));
+  const res=$('#result');res.hidden=false;
+  if(vals.some(Number.isNaN)){$('#rlabel').textContent='Missing input';$('#rlabel').className='label err';$('#rmeta').textContent='Fill in all '+inputs.length+' features.';$('#bars').replaceChildren();$('#raw').textContent='';return;}
+  try{
+    const {status,body,ms}=await apiPredict(vals);
+    $('#raw').textContent=JSON.stringify(body,null,2);
+    if(status!==200){$('#rlabel').textContent='Error '+status;$('#rlabel').className='label err';$('#rmeta').textContent=typeof body.detail==='string'?body.detail:'Request rejected';$('#bars').replaceChildren();return;}
+    $('#rlabel').textContent=body.label;$('#rlabel').className='label';
+    $('#rmeta').textContent=`HTTP ${status} · ${ms.toFixed(1)} ms round trip · model v${body.model_version}`;
+    $('#bars').replaceChildren(...Object.entries(body.probabilities).sort((a,b)=>b[1]-a[1]).map(([k,v])=>{
+      const d=document.createElement('div');d.className='bar';
+      d.innerHTML='<div class="top"><span></span><span></span></div><div class="track"><div class="fill"></div></div>';
+      d.querySelector('span').textContent=k;d.querySelectorAll('span')[1].textContent=(v*100).toFixed(2)+'%';
+      d.querySelector('.fill').style.width=(v*100)+'%';return d;}));
+  }catch(e){$('#rlabel').textContent='Request failed';$('#rlabel').className='label err';$('#rmeta').textContent=String(e);}
+};
+init();
+</script>
+</body>
+</html>
